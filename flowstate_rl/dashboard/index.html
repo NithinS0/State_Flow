@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlowState RL - Command Center</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg: #05060f;
+            --accent: #00e5ff;
+            --card-bg: rgba(12, 14, 26, 0.8);
+            --border: rgba(255, 255, 255, 0.05);
+            --text: #ffffff;
+            --muted: #888ea8;
+            --flow: #00e5ff;
+            --bored: #ffc200;
+            --overwhelmed: #ff4a4a;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            min-height: 100vh;
+        }
+
+        /* Header Layout */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .brand h1 {
+            font-size: 1.5rem;
+            letter-spacing: 2px;
+            color: var(--accent);
+            text-transform: uppercase;
+        }
+
+        .brand p {
+            font-size: 0.8rem;
+            color: var(--muted);
+        }
+
+        .quick-stats {
+            display: flex;
+            gap: 2rem;
+        }
+
+        .q-item {
+            text-align: right;
+        }
+
+        .q-label {
+            font-size: 0.7rem;
+            color: var(--muted);
+            text-transform: uppercase;
+        }
+
+        .q-val {
+            font-size: 1.2rem;
+            font-weight: bold;
+            font-family: monospace;
+        }
+
+        /* Grid Layout */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            grid-template-rows: auto auto;
+            gap: 1.5rem;
+        }
+
+        /* Stat Cards */
+        .card {
+            background: var(--card-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 1.25rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; height: 100%; width: 4px;
+            background: var(--accent);
+            opacity: 0.5;
+        }
+
+        .card-label {
+            font-size: 0.7rem;
+            color: var(--muted);
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+            display: block;
+        }
+
+        .card-value {
+            font-size: 2rem;
+            font-weight: 800;
+            letter-spacing: -1px;
+        }
+
+        /* Charts Row */
+        .chart-row {
+            grid-column: span 3;
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 1.5rem;
+        }
+
+        .chart-box {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 1.5rem;
+            height: 400px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chart-box h2 {
+            font-size: 0.8rem;
+            color: var(--muted);
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+        }
+
+        /* Side Panel */
+        .side-panel {
+            grid-column: span 1;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .action-log {
+            flex: 1;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.75rem;
+        }
+
+        .log-item {
+            padding: 0.5rem 0;
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .log-ts { color: var(--muted); }
+        .log-msg { color: var(--accent); }
+
+        /* Animations */
+        .pulse {
+            animation: pulse-dot 1.5s infinite;
+        }
+
+        @keyframes pulse-dot {
+            0% { opacity: 0.2; }
+            50% { opacity: 1; }
+            100% { opacity: 0.2; }
+        }
+
+        .val-up { color: var(--flow); }
+        .val-down { color: var(--overwhelmed); }
+
+        /* Waiting Screen */
+        #waiting-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--bg);
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .loader {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border);
+            border-top: 3px solid var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        #main-content { opacity: 0; pointer-events: none; transition: opacity 0.5s ease; }
+        #main-content.visible { opacity: 1; pointer-events: auto; }
+
+    </style>
+</head>
+<body>
+
+    <div id="waiting-overlay">
+        <div class="loader"></div>
+        <p style="color:var(--muted); letter-spacing: 2px;">WAITING FOR GAME METRICS...</p>
+    </div>
+
+    <div id="main-content">
+        <header>
+        <div class="brand">
+            <h1>FlowState RL</h1>
+            <p>Vertical Defensive Perimeter Control</p>
+        </div>
+        <div class="quick-stats">
+            <div class="q-item">
+                <p class="q-label">Session Score</p>
+                <p class="q-val" id="top-score">0000</p>
+            </div>
+            <div class="q-item">
+                <p class="q-label">Total Kills</p>
+                <p class="q-val" id="top-kills">0</p>
+            </div>
+            <div class="q-item">
+                <p class="q-label">Total Escaped</p>
+                <p class="q-val" id="top-escaped">0</p>
+            </div>
+            <div class="q-item">
+                <p class="q-label">Status</p>
+                <p class="q-val" id="status-val" style="color:var(--muted)"><span class="pulse">●</span> DISCONNECTED</p>
+            </div>
+        </div>
+    </header>
+
+    <div class="dashboard-grid">
+        <!-- Top Stats -->
+        <div class="card" id="state-card" style="border-left: 4px solid var(--flow)">
+            <span class="card-label">Biometric State</span>
+            <span class="card-value" id="state-val">FLOW</span>
+        </div>
+        <div class="card">
+            <span class="card-label">Enemy Speed</span>
+            <span class="card-value" id="speed-val">0.0</span>
+        </div>
+        <div class="card">
+            <span class="card-label">Spawn Rate</span>
+            <span class="card-value" id="spawn-val">0.0</span>
+        </div>
+        <div class="card">
+            <span class="card-label">Enemy HP</span>
+            <span class="card-value" id="hp-val">1</span>
+        </div>
+
+        <!-- Charts Main Row -->
+        <div class="chart-row">
+            <div class="chart-box">
+                <h2>Flow Consistency</h2>
+                <canvas id="gaugeChart"></canvas>
+            </div>
+            <div class="chart-box">
+                <h2>Vector Analysis (Normalized)</h2>
+                <canvas id="metricsChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Action Log Side -->
+        <div class="side-panel">
+            <h2>Neural Action Log</h2>
+            <div class="action-log" id="log-container">
+                <!-- Log items inject here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let gaugeChart, metricsChart;
+        const stateColors = {
+            'FLOW': '#00e5ff',
+            'BORED': '#ffc200',
+            'OVERWHELMED': '#ff4a4a'
+        };
+
+        function initCharts() {
+            const ctxG = document.getElementById('gaugeChart').getContext('2d');
+            gaugeChart = new Chart(ctxG, {
+                type: 'doughnut',
+                data: {
+                    datasets: [{
+                        data: [70, 30],
+                        backgroundColor: [stateColors.FLOW, 'rgba(255,255,255,0.05)'],
+                        borderWidth: 0,
+                        circumference: 180,
+                        rotation: 270,
+                    }]
+                },
+                options: {
+                    cutout: '80%',
+                    animation: false,
+                    plugins: { legend: { display: false } }
+                }
+            });
+
+            const ctxM = document.getElementById('metricsChart').getContext('2d');
+            metricsChart = new Chart(ctxM, {
+                type: 'bar',
+                data: {
+                    labels: ['Kill Rate', 'Death Rate', 'Dodge Success', 'Health', 'Score Vel', 'Danger'],
+                    datasets: [{
+                        data: [0, 0, 0, 0, 0, 0],
+                        backgroundColor: 'rgba(0, 229, 255, 0.4)',
+                        borderColor: stateColors.FLOW,
+                        borderWidth: 2,
+                        borderRadius: 10
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    animation: { duration: 500 },
+                    scales: {
+                        x: { min: 0, max: 1, grid: { color: 'rgba(255,255,255,0.05)' } },
+                        y: { grid: { display: false }, ticks: { color: '#888ea8' } }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        let lastActionId = -1;
+        function addLog(msg) {
+            const container = document.getElementById('log-container');
+            const item = document.createElement('div');
+            item.className = 'log-item';
+            const ts = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            item.innerHTML = `<span class="log-ts">[${ts}]</span> <span class="log-msg">${msg}</span>`;
+            container.prepend(item);
+            if (container.children.length > 20) container.lastChild.remove();
+        }
+
+        async function update() {
+            try {
+                const res = await fetch('/metrics');
+                const d = await res.json();
+                
+                // Step 3 & 5: Handle waiting state or invalid data
+                if (d.status === "waiting" || d.kill_rate === undefined) {
+                    document.getElementById('waiting-overlay').style.display = 'flex';
+                    document.getElementById('main-content').classList.remove('visible');
+                    return;
+                }
+
+                // Step 4: Hide waiting screen on first metrics
+                document.getElementById('waiting-overlay').style.display = 'none';
+                document.getElementById('main-content').classList.add('visible');
+
+                const color = stateColors[d.current_state] || stateColors.FLOW;
+
+                // Basic Stats
+                document.getElementById('state-val').innerText = d.current_state;
+                document.getElementById('state-val').style.color = color;
+                document.getElementById('state-card').style.borderLeftColor = color;
+                
+                document.getElementById('speed-val').innerText = d.enemy_speed.toFixed(1);
+                document.getElementById('spawn-val').innerText = d.spawn_rate.toFixed(1);
+                document.getElementById('hp-val').innerText = d.enemy_hp;
+                
+                document.getElementById('top-score').innerText = d.score.toString().padStart(4, '0');
+                document.getElementById('top-kills').innerText = d.kills;
+                document.getElementById('top-escaped').innerText = d.escaped_enemies || 0;
+
+                // Step 6: Update status indicator
+                document.getElementById('status-val').innerHTML = '<span class="pulse">●</span> GAME CONNECTED';
+                document.getElementById('status-val').style.color = 'var(--accent)';
+
+                // Gauge
+                gaugeChart.data.datasets[0].data = [d.flow_pct, 100 - d.flow_pct];
+                gaugeChart.data.datasets[0].backgroundColor[0] = color;
+                gaugeChart.update('none');
+
+                // Bar
+                const mData = [d.kill_rate, d.death_rate, d.dodge_success || 0, d.avg_health, d.score_velocity, d.danger_time];
+                metricsChart.data.datasets[0].data = mData;
+                metricsChart.data.datasets[0].borderColor = color;
+                metricsChart.data.datasets[0].backgroundColor = color + '44'; // Add alpha
+                metricsChart.update();
+
+                // Log Actions
+                const actionMap = {
+                    0: "Agent: ACCEL DESCENT", 1: "Agent: SLOW DESCENT", 2: "Agent: STAT DESCENT",
+                    3: "Agent: DENSE WAVE",    4: "Agent: SPARSE WAVE",  5: "Agent: STAY SPW",
+                    6: "Agent: ARMOR ENEMY",   7: "Agent: WEAKEN ENEMY", 8: "Agent: STAY HP"
+                };
+                if (d.last_action !== lastActionId) {
+                    addLog(actionMap[d.last_action] || "Agent Adjusted Params");
+                    lastActionId = d.last_action;
+                }
+
+            } catch(e) { console.error(e); }
+        }
+
+        window.onload = () => {
+            initCharts();
+            setInterval(update, 2000);
+            update();
+        };
+    </script>
+</body>
+</html>
