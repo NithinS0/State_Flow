@@ -8,6 +8,18 @@ FlowState-RL is an AI-driven adaptive difficulty system for a 2D shooter game. I
 - **Live Metrics Dashboard:** A Flask-based web dashboard that provides real-time visualizations of player state (Flow, Bored, Anxious), performance, and difficulty metrics.
 - **Pygame Client:** A 2D top-down shooter used as the testbed environment.
 
+## Architecture
+
+```mermaid
+graph TD
+    A[Pygame Client] -->|Live Metrics| B(Metrics Collector)
+    B -->|State & Performance Data| C{PPO RL Agent}
+    C -->|Difficulty Adjustments| A
+    B -->|Logs Data to JSON| D[(live_metrics.json)]
+    D -->|Reads JSON| E[Flask Dashboard Server]
+    E -->|Serves UI| F((Web Dashboard))
+```
+
 ## Project Structure
 - `flowstate_rl/game`: Contains the Pygame environment (`main.py`), training scripts (`train.py`), and evaluation code.
 - `flowstate_rl/dashboard`: Contains the Flask server (`server.py`) and HTML/JS frontend to monitor the game.
